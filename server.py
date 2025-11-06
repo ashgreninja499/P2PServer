@@ -1,10 +1,8 @@
 from flask import Flask, jsonify
-from flask_cors import CORS
 import random
 import string
 
 app = Flask(__name__)
-CORS(app)  # allow cross-origin requests for mobile apps
 
 def generate_payload(length=8):
     """Generate a random alphanumeric payload."""
