@@ -2,13 +2,12 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import uuid
+import os
 
 app = Flask(__name__)
 
-# =====================
-# Database configuration
-# =====================
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///p2pserver.db"
+# Use PostgreSQL from environment variable
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
@@ -20,7 +19,6 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    ip_address = db.Column(db.String(45), nullable=True)  # Optional: store last known IP
 
 class FriendRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -54,6 +52,7 @@ def register():
     db.session.add(user)
     db.session.commit()
     return jsonify({"message": f"User {username} registered successfully."})
+
 
 @app.route("/friend-request", methods=["POST"])
 def friend_request():
@@ -90,6 +89,7 @@ def friend_request():
         "expires_at": expires_at.isoformat()
     })
 
+
 @app.route("/friend-request/<code>", methods=["GET"])
 def get_friend_request(code):
     fr = FriendRequest.query.filter_by(code=code).first()
@@ -112,6 +112,7 @@ def get_friend_request(code):
         "expires_at": fr.expires_at.isoformat()
     })
 
+
 @app.route("/friend-request/<code>", methods=["DELETE"])
 def delete_friend_request(code):
     fr = FriendRequest.query.filter_by(code=code).first()
@@ -122,24 +123,6 @@ def delete_friend_request(code):
     db.session.commit()
     return jsonify({"message": f"Friend request {code} deleted"})
 
-# =====================
-# Optional: Update user's last known IP
-# =====================
-@app.route("/update-ip", methods=["POST"])
-def update_ip():
-    data = request.get_json()
-    username = data.get("username")
-    ip = data.get("ip")
-    if not username or not ip:
-        return jsonify({"error": "Username and IP required"}), 400
-
-    user = User.query.filter_by(username=username).first()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    user.ip_address = ip
-    db.session.commit()
-    return jsonify({"message": f"IP updated for {username}", "ip": ip})
 
 # =====================
 # Cleanup expired requests automatically
@@ -152,8 +135,9 @@ def cleanup_expired():
     if expired:
         db.session.commit()
 
+
 # =====================
 # Run server
 # =====================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
