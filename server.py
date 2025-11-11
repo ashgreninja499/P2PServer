@@ -6,7 +6,7 @@ import os
 
 app = Flask(__name__)
 
-# Use PostgreSQL from environment variable
+# PostgreSQL from environment variable
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -19,6 +19,8 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    ip_address = db.Column(db.String(45), nullable=True)  # store IPv4/IPv6
+
 
 class FriendRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -28,11 +30,13 @@ class FriendRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime)
 
+
 # =====================
 # Initialize DB
 # =====================
 with app.app_context():
     db.create_all()
+
 
 # =====================
 # Routes
@@ -42,16 +46,36 @@ with app.app_context():
 def register():
     data = request.get_json()
     username = data.get("username")
+    ip_address = data.get("ip")  # optional, client can send IP
+
     if not username:
         return jsonify({"error": "Username is required"}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists"}), 400
 
-    user = User(username=username)
+    user = User(username=username, ip_address=ip_address)
     db.session.add(user)
     db.session.commit()
     return jsonify({"message": f"User {username} registered successfully."})
+
+
+@app.route("/update-ip", methods=["POST"])
+def update_ip():
+    data = request.get_json()
+    username = data.get("username")
+    ip_address = data.get("ip")
+
+    if not username or not ip_address:
+        return jsonify({"error": "Username and IP are required"}), 400
+
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.ip_address = ip_address
+    db.session.commit()
+    return jsonify({"message": f"IP address for {username} updated."})
 
 
 @app.route("/friend-request", methods=["POST"])
@@ -86,7 +110,9 @@ def friend_request():
         "sender": sender_name,
         "receiver": receiver_name,
         "code": code,
-        "expires_at": expires_at.isoformat()
+        "expires_at": expires_at.isoformat(),
+        "sender_ip": sender.ip_address,
+        "receiver_ip": receiver.ip_address
     })
 
 
@@ -109,7 +135,9 @@ def get_friend_request(code):
         "sender": sender.username,
         "receiver": receiver.username,
         "code": fr.code,
-        "expires_at": fr.expires_at.isoformat()
+        "expires_at": fr.expires_at.isoformat(),
+        "sender_ip": sender.ip_address,
+        "receiver_ip": receiver.ip_address
     })
 
 
